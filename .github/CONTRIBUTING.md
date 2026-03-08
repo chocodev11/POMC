@@ -26,9 +26,9 @@ Thanks for your interest in contributing to Ferrite!
 - **Rust nightly** is required (due to `simdnbt` dependency)
 - Run `cargo clippy` before submitting a PR
 - Run `cargo fmt` to format your code
-- No `unwrap()` outside of tests — use `thiserror` for error types
+- No `unwrap()` outside of tests  - use `thiserror` for error types
 - Comments explain **why**, not **what**
-- Keep changes focused — one feature or fix per PR
+- Keep changes focused  - one feature or fix per PR
 
 ## Project Structure
 

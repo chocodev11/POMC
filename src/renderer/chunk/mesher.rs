@@ -41,15 +41,69 @@ struct Face {
 }
 
 const FACES: [Face; 6] = [
-    Face { positions: [[0.0,1.0,0.0],[1.0,1.0,0.0],[1.0,1.0,1.0],[0.0,1.0,1.0]], offset: [0,1,0], light: 1.0 },
-    Face { positions: [[0.0,0.0,1.0],[1.0,0.0,1.0],[1.0,0.0,0.0],[0.0,0.0,0.0]], offset: [0,-1,0], light: 0.5 },
-    Face { positions: [[1.0,0.0,0.0],[0.0,0.0,0.0],[0.0,1.0,0.0],[1.0,1.0,0.0]], offset: [0,0,-1], light: 0.7 },
-    Face { positions: [[0.0,0.0,1.0],[1.0,0.0,1.0],[1.0,1.0,1.0],[0.0,1.0,1.0]], offset: [0,0,1], light: 0.7 },
-    Face { positions: [[1.0,0.0,1.0],[1.0,0.0,0.0],[1.0,1.0,0.0],[1.0,1.0,1.0]], offset: [1,0,0], light: 0.8 },
-    Face { positions: [[0.0,0.0,0.0],[0.0,0.0,1.0],[0.0,1.0,1.0],[0.0,1.0,0.0]], offset: [-1,0,0], light: 0.8 },
+    Face {
+        positions: [
+            [0.0, 1.0, 0.0],
+            [1.0, 1.0, 0.0],
+            [1.0, 1.0, 1.0],
+            [0.0, 1.0, 1.0],
+        ],
+        offset: [0, 1, 0],
+        light: 1.0,
+    },
+    Face {
+        positions: [
+            [0.0, 0.0, 1.0],
+            [1.0, 0.0, 1.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+        ],
+        offset: [0, -1, 0],
+        light: 0.5,
+    },
+    Face {
+        positions: [
+            [1.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [1.0, 1.0, 0.0],
+        ],
+        offset: [0, 0, -1],
+        light: 0.7,
+    },
+    Face {
+        positions: [
+            [0.0, 0.0, 1.0],
+            [1.0, 0.0, 1.0],
+            [1.0, 1.0, 1.0],
+            [0.0, 1.0, 1.0],
+        ],
+        offset: [0, 0, 1],
+        light: 0.7,
+    },
+    Face {
+        positions: [
+            [1.0, 0.0, 1.0],
+            [1.0, 0.0, 0.0],
+            [1.0, 1.0, 0.0],
+            [1.0, 1.0, 1.0],
+        ],
+        offset: [1, 0, 0],
+        light: 0.8,
+    },
+    Face {
+        positions: [
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0],
+            [0.0, 1.0, 1.0],
+            [0.0, 1.0, 0.0],
+        ],
+        offset: [-1, 0, 0],
+        light: 0.8,
+    },
 ];
 
-fn face_texture<'a>(textures: &'a FaceTextures, face_idx: usize) -> &'a str {
+fn face_texture(textures: &FaceTextures, face_idx: usize) -> &str {
     match face_idx {
         0 => textures.top,
         1 => textures.bottom,
@@ -109,7 +163,11 @@ pub fn mesh_chunk(
         }
     }
 
-    ChunkMeshData { pos, vertices, indices }
+    ChunkMeshData {
+        pos,
+        vertices,
+        indices,
+    }
 }
 
 fn emit_face(
