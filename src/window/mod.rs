@@ -99,7 +99,7 @@ impl App {
             assets_dir,
             position_set: false,
             state,
-            menu: MainMenu::new(),
+            menu: MainMenu::new(&game_dir, Arc::clone(&tokio_rt)),
             tokio_rt,
             player: LocalPlayer::new(),
             tick_accumulator: 0.0,

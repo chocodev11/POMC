@@ -41,20 +41,14 @@ pub struct HudTextures {
     pub edition_badge: TextureHandle,
     pub icon_language: TextureHandle,
     pub icon_accessibility: TextureHandle,
-    pub panorama_overlay: TextureHandle,
 }
 
 impl HudTextures {
-    pub fn load(ctx: &egui::Context, assets_dir: &Path, asset_index: &Option<AssetIndex>) -> Self {
+    pub fn load(ctx: &egui::Context, assets_dir: &Path, _asset_index: &Option<AssetIndex>) -> Self {
         let gui_dir = assets_dir.join("assets/minecraft/textures/gui");
         let sprites = gui_dir.join("sprites");
         let hud = sprites.join("hud");
         let heart = hud.join("heart");
-
-        let overlay_path = asset_index
-            .as_ref()
-            .and_then(|idx| idx.resolve("minecraft/textures/gui/title/background/panorama_overlay.png"))
-            .unwrap_or_else(|| gui_dir.join("title/background/panorama_overlay.png"));
 
         Self {
             hotbar: load_texture(ctx, &hud.join("hotbar.png"), "hotbar", NEAREST_FILTER),
@@ -71,7 +65,6 @@ impl HudTextures {
             edition_badge: load_texture(ctx, &gui_dir.join("title/edition.png"), "edition", NEAREST_FILTER),
             icon_language: load_texture(ctx, &sprites.join("icon/language.png"), "icon_lang", NEAREST_FILTER),
             icon_accessibility: load_texture(ctx, &sprites.join("icon/accessibility.png"), "icon_a11y", NEAREST_FILTER),
-            panorama_overlay: load_texture(ctx, &overlay_path, "panorama_overlay", TextureOptions::LINEAR),
         }
     }
 }
@@ -224,37 +217,31 @@ fn draw_food(painter: &egui::Painter, textures: &HudTextures, hotbar_right: f32,
 pub fn mc_button(ui: &mut egui::Ui, textures: &HudTextures, label: &str) -> bool {
     let gs = gui_scale(ui.ctx());
     let btn_w = textures.button.size()[0] as f32 * gs;
-    mc_button_sized(ui, textures, label, btn_w, gs)
+    mc_button_sized(ui, textures, label, btn_w, gs, true)
 }
 
-pub fn mc_icon_button(ui: &mut egui::Ui, textures: &HudTextures, icon: &TextureHandle) -> bool {
-    let gs = gui_scale(ui.ctx());
+fn mc_button_sized(ui: &mut egui::Ui, textures: &HudTextures, label: &str, width: f32, gs: f32, active: bool) -> bool {
     let btn_h = textures.button.size()[1] as f32 * gs;
-    let (rect, response) = allocate_button(ui, textures, Vec2::splat(btn_h));
 
-    let icon_size = Vec2::splat(btn_h * 0.5);
-    let icon_rect = Rect::from_center_size(rect.center(), icon_size);
-    ui.painter().image(icon.id(), icon_rect, UV_FULL, Color32::WHITE);
+    if !active {
+        let (rect, _) = ui.allocate_exact_size(Vec2::new(width, btn_h), Sense::hover());
+        let tint = Color32::from_rgb(80, 80, 80);
+        ui.painter().image(textures.button.id(), rect, UV_FULL, tint);
+        let text_color = Color32::from_rgb(160, 160, 160);
+        super::font::mc_text_centered(ui.painter(), ui.ctx(), rect.center(), label, 16.0, text_color, true);
+        return false;
+    }
 
-    response.clicked()
-}
-
-pub fn mc_button_w(ui: &mut egui::Ui, textures: &HudTextures, label: &str, width: f32) -> bool {
-    let gs = gui_scale(ui.ctx());
-    mc_button_sized(ui, textures, label, width, gs)
-}
-
-fn mc_button_sized(ui: &mut egui::Ui, textures: &HudTextures, label: &str, width: f32, gs: f32) -> bool {
-    let btn_h = textures.button.size()[1] as f32 * gs;
     let (rect, response) = allocate_button(ui, textures, Vec2::new(width, btn_h));
-
     super::font::mc_text_centered(ui.painter(), ui.ctx(), rect.center(), label, 16.0, Color32::WHITE, true);
-
     response.clicked()
 }
 
 fn allocate_button(ui: &mut egui::Ui, textures: &HudTextures, size: Vec2) -> (Rect, egui::Response) {
     let (rect, response) = ui.allocate_exact_size(size, Sense::click());
+    if response.hovered() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
     let tex = if response.hovered() {
         &textures.button_highlighted
     } else {

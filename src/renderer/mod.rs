@@ -75,7 +75,7 @@ impl Renderer {
         let panorama_pipeline =
             PanoramaPipeline::new(&ctx.device, &ctx.queue, ctx.config.format, asset_index);
 
-        Ok(Self {
+        let mut renderer = Self {
             ctx,
             camera,
             chunk_pipeline,
@@ -86,7 +86,31 @@ impl Renderer {
             egui_state,
             egui_ctx,
             panorama_pipeline,
-        })
+        };
+        renderer.clear_screen();
+        Ok(renderer)
+    }
+
+    fn clear_screen(&mut self) {
+        let Ok(output) = self.ctx.surface.get_current_texture() else { return };
+        let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let mut encoder = self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
+        encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("clear_pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color { r: 0.047, g: 0.047, b: 0.078, a: 1.0 }),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+        });
+        self.ctx.queue.submit(std::iter::once(encoder.finish()));
+        output.present();
     }
 
     pub fn resize(&mut self, new_size: PhysicalSize<u32>) {

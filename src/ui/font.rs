@@ -40,6 +40,8 @@ struct GlyphInfo {
     col: u32,
     row: u32,
     width: u32,
+    y_offset: u32,
+    height: u32,
 }
 
 #[derive(Clone)]
@@ -80,18 +82,20 @@ impl McFont {
                 if ch == '\0' {
                     continue;
                 }
-                let width = detect_glyph_width(&img, col as u32 * cell_w, row as u32 * cell_h, cell_w, cell_h);
-                if width > 0 {
+                let bounds = detect_glyph_bounds(&img, col as u32 * cell_w, row as u32 * cell_h, cell_w, cell_h);
+                if let Some((width, y_offset, height)) = bounds {
                     glyphs.insert(ch, GlyphInfo {
                         col: col as u32,
                         row: row as u32,
                         width,
+                        y_offset,
+                        height,
                     });
                 }
             }
         }
 
-        glyphs.insert(' ', GlyphInfo { col: 0, row: 2, width: cell_w / 2 });
+        glyphs.insert(' ', GlyphInfo { col: 0, row: 2, width: cell_w / 2, y_offset: 0, height: cell_h });
 
         let size = [tex_w as usize, tex_h as usize];
         let pixels = img.into_raw();
@@ -186,17 +190,21 @@ impl McFont {
                 continue;
             };
 
-            let glyph_w = glyph.width as f32 * scale / inner.cell_h as f32;
+            let px = scale / inner.cell_h as f32;
+            let glyph_w = glyph.width as f32 * px;
+            let glyph_h = glyph.height as f32 * px;
+            let y_off = glyph.y_offset as f32 * px;
 
             let u0 = (glyph.col * inner.cell_w) as f32 / tex_w;
-            let v0 = (glyph.row * inner.cell_h) as f32 / tex_h;
+            let v0 = (glyph.row * inner.cell_h + glyph.y_offset) as f32 / tex_h;
             let u1 = (glyph.col * inner.cell_w + glyph.width) as f32 / tex_w;
-            let v1 = ((glyph.row + 1) * inner.cell_h) as f32 / tex_h;
+            let v1 = (glyph.row * inner.cell_h + glyph.y_offset + glyph.height) as f32 / tex_h;
 
-            let tl = rotate(pos);
-            let tr = rotate(Pos2::new(pos.x + glyph_w, pos.y));
-            let bl = rotate(Pos2::new(pos.x, pos.y + scale));
-            let br = rotate(Pos2::new(pos.x + glyph_w, pos.y + scale));
+            let glyph_pos = Pos2::new(pos.x, pos.y + y_off);
+            let tl = rotate(glyph_pos);
+            let tr = rotate(Pos2::new(glyph_pos.x + glyph_w, glyph_pos.y));
+            let bl = rotate(Pos2::new(glyph_pos.x, glyph_pos.y + glyph_h));
+            let br = rotate(Pos2::new(glyph_pos.x + glyph_w, glyph_pos.y + glyph_h));
 
             let mesh = egui::Mesh {
                 texture_id: inner.texture.id(),
@@ -210,7 +218,7 @@ impl McFont {
             };
             painter.add(egui::Shape::mesh(mesh));
 
-            pos.x += glyph_w + scale / inner.cell_h as f32;
+            pos.x += glyph_w + px;
         }
     }
 
@@ -231,19 +239,25 @@ impl McFont {
                 continue;
             };
 
-            let glyph_w = glyph.width as f32 * scale / inner.cell_h as f32;
+            let px = scale / inner.cell_h as f32;
+            let glyph_w = glyph.width as f32 * px;
+            let glyph_h = glyph.height as f32 * px;
+            let y_off = glyph.y_offset as f32 * px;
 
             let u0 = (glyph.col * inner.cell_w) as f32 / tex_w;
-            let v0 = (glyph.row * inner.cell_h) as f32 / tex_h;
+            let v0 = (glyph.row * inner.cell_h + glyph.y_offset) as f32 / tex_h;
             let u1 = (glyph.col * inner.cell_w + glyph.width) as f32 / tex_w;
-            let v1 = ((glyph.row + 1) * inner.cell_h) as f32 / tex_h;
+            let v1 = (glyph.row * inner.cell_h + glyph.y_offset + glyph.height) as f32 / tex_h;
 
-            let rect = Rect::from_min_size(pos, Vec2::new(glyph_w, scale));
+            let rect = Rect::from_min_size(
+                Pos2::new(pos.x, pos.y + y_off),
+                Vec2::new(glyph_w, glyph_h),
+            );
             let uv = Rect::from_min_max(Pos2::new(u0, v0), Pos2::new(u1, v1));
 
             painter.image(inner.texture.id(), rect, uv, color);
 
-            pos.x += glyph_w + scale / inner.cell_h as f32;
+            pos.x += glyph_w + px;
         }
     }
 }
@@ -276,18 +290,24 @@ fn shadow_color(color: Color32) -> Color32 {
     )
 }
 
-fn detect_glyph_width(img: &image::RgbaImage, x0: u32, y0: u32, cell_w: u32, cell_h: u32) -> u32 {
-    let mut max_x = 0;
-    for y in y0..y0 + cell_h {
-        for x in (x0..x0 + cell_w).rev() {
-            if img.get_pixel(x, y)[3] > 0 {
-                let local_x = x - x0 + 1;
-                if local_x > max_x {
-                    max_x = local_x;
-                }
-                break;
+fn detect_glyph_bounds(img: &image::RgbaImage, x0: u32, y0: u32, cell_w: u32, cell_h: u32) -> Option<(u32, u32, u32)> {
+    let mut max_x: u32 = 0;
+    let mut min_y: u32 = cell_h;
+    let mut max_y: u32 = 0;
+
+    for dy in 0..cell_h {
+        for dx in 0..cell_w {
+            if img.get_pixel(x0 + dx, y0 + dy)[3] > 0 {
+                max_x = max_x.max(dx + 1);
+                min_y = min_y.min(dy);
+                max_y = max_y.max(dy + 1);
             }
         }
     }
-    max_x
+
+    if max_x == 0 {
+        return None;
+    }
+
+    Some((max_x, min_y, max_y - min_y))
 }
