@@ -8,6 +8,7 @@ fn main() {
     let shaders = [
         ("chunk.wgsl", &[("vs_main", naga::ShaderStage::Vertex), ("fs_main", naga::ShaderStage::Fragment)][..]),
         ("panorama.wgsl", &[("vs_main", naga::ShaderStage::Vertex), ("fs_main", naga::ShaderStage::Fragment)][..]),
+        ("egui.wgsl", &[("vs_main", naga::ShaderStage::Vertex), ("fs_main", naga::ShaderStage::Fragment)][..]),
     ];
 
     for (file, entries) in &shaders {

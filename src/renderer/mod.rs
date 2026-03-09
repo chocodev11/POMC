@@ -22,6 +22,7 @@ use chunk::buffer::ChunkBufferStore;
 use chunk::mesher::{ChunkMeshData, MeshDispatcher};
 use context::VulkanContext;
 use pipelines::chunk::ChunkPipeline;
+use pipelines::egui_render::EguiRenderer;
 use pipelines::panorama::PanoramaPipeline;
 use swapchain::SwapchainState;
 
@@ -51,6 +52,7 @@ pub struct Renderer {
     atlas: TextureAtlas,
     chunk_pipeline: ChunkPipeline,
     panorama_pipeline: PanoramaPipeline,
+    egui_renderer: EguiRenderer,
     chunk_buffers: ChunkBufferStore,
     egui_state: egui_winit::State,
     egui_ctx: egui::Context,
@@ -111,6 +113,12 @@ impl Renderer {
             assets_dir,
         );
 
+        let egui_renderer = EguiRenderer::new(
+            &ctx.device,
+            swapchain_state.render_pass,
+            &ctx.allocator,
+        );
+
         let chunk_buffers = ChunkBufferStore::new();
 
         let egui_ctx = egui::Context::default();
@@ -131,6 +139,7 @@ impl Renderer {
             atlas,
             chunk_pipeline,
             panorama_pipeline,
+            egui_renderer,
             chunk_buffers,
             egui_state,
             egui_ctx,
@@ -157,6 +166,7 @@ impl Renderer {
 
         self.chunk_pipeline.destroy(&self.ctx.device, &self.ctx.allocator);
         self.panorama_pipeline.destroy(&self.ctx.device, &self.ctx.allocator);
+        self.egui_renderer.destroy(&self.ctx.device, &self.ctx.allocator);
 
         self.swapchain.destroy(
             &self.ctx.device,
@@ -190,6 +200,12 @@ impl Renderer {
             self.swapchain.render_pass,
             &self.ctx.allocator,
             &self.assets_dir,
+        );
+
+        self.egui_renderer = EguiRenderer::new(
+            &self.ctx.device,
+            self.swapchain.render_pass,
+            &self.ctx.allocator,
         );
 
         self.swapchain_dirty = false;
@@ -254,26 +270,27 @@ impl Renderer {
         &mut self,
         window: &Window,
         hide_cursor: bool,
-        _hud_fn: impl FnMut(&egui::Context),
+        hud_fn: impl FnMut(&egui::Context),
     ) -> Result<(), RendererError> {
-        self.render_frame(window, hide_cursor, [0.529, 0.808, 0.922, 1.0], RenderMode::World)
+        self.render_frame(window, hide_cursor, [0.529, 0.808, 0.922, 1.0], RenderMode::World, hud_fn)
     }
 
     pub fn render_ui(
         &mut self,
         window: &Window,
         scroll: f32,
-        _ui_fn: impl FnMut(&egui::Context),
+        ui_fn: impl FnMut(&egui::Context),
     ) -> Result<(), RendererError> {
-        self.render_frame(window, false, [0.0, 0.0, 0.0, 1.0], RenderMode::Panorama(scroll))
+        self.render_frame(window, false, [0.0, 0.0, 0.0, 1.0], RenderMode::Panorama(scroll), ui_fn)
     }
 
     fn render_frame(
         &mut self,
-        _window: &Window,
-        _hide_cursor: bool,
+        window: &Window,
+        hide_cursor: bool,
         clear_color: [f32; 4],
         mode: RenderMode,
+        ui_fn: impl FnMut(&egui::Context),
     ) -> Result<(), RendererError> {
         if self.swapchain_dirty {
             self.recreate_swapchain()?;
@@ -311,6 +328,37 @@ impl Renderer {
             let uniform = CameraUniform::from_camera(&self.camera);
             self.chunk_pipeline.update_camera(frame, &uniform);
         }
+
+        let raw_input = self.egui_state.take_egui_input(window);
+        let full_output = self.egui_ctx.run(raw_input, ui_fn);
+
+        self.egui_state
+            .handle_platform_output(window, full_output.platform_output);
+
+        if hide_cursor {
+            window.set_cursor_visible(false);
+        }
+
+        let pixels_per_point = full_output.pixels_per_point;
+        let primitives = self
+            .egui_ctx
+            .tessellate(full_output.shapes, pixels_per_point);
+
+        for (id, delta) in &full_output.textures_delta.set {
+            self.egui_renderer.update_texture(
+                &self.ctx.device,
+                self.ctx.graphics_queue,
+                self.ctx.command_pool,
+                &self.ctx.allocator,
+                *id,
+                delta,
+            );
+        }
+
+        let screen_size = [
+            self.swapchain.extent.width as f32 / pixels_per_point,
+            self.swapchain.extent.height as f32 / pixels_per_point,
+        ];
 
         unsafe {
             self.ctx.device.reset_fences(&[fence])?;
@@ -378,6 +426,15 @@ impl Renderer {
                 }
             }
 
+            self.egui_renderer.render(
+                &self.ctx.device,
+                &self.ctx.allocator,
+                cmd,
+                &primitives,
+                screen_size,
+                pixels_per_point,
+            );
+
             self.ctx.device.cmd_end_render_pass(cmd);
             self.ctx.device.end_command_buffer(cmd)?;
 
@@ -416,6 +473,11 @@ impl Renderer {
             }
         }
 
+        for id in &full_output.textures_delta.free {
+            self.egui_renderer
+                .free_texture(&self.ctx.device, &self.ctx.allocator, *id);
+        }
+
         self.ctx.advance_frame();
         Ok(())
     }
@@ -429,6 +491,8 @@ impl Drop for Renderer {
         self.chunk_pipeline
             .destroy(&self.ctx.device, &self.ctx.allocator);
         self.panorama_pipeline
+            .destroy(&self.ctx.device, &self.ctx.allocator);
+        self.egui_renderer
             .destroy(&self.ctx.device, &self.ctx.allocator);
         self.atlas
             .destroy(&self.ctx.device, &self.ctx.allocator);
