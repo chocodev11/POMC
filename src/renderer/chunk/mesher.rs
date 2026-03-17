@@ -153,7 +153,20 @@ fn mesh_chunk_snapshot(
 
                 let block_pos = [bx as f32, by as f32, bz as f32];
 
-                if let Some(baked) = registry.get_baked_model(state) {
+                if let Some(fluid) = fluid_id(state) {
+                    emit_fluid(
+                        &mut vertices,
+                        &mut indices,
+                        block_pos,
+                        fluid,
+                        snapshot,
+                        registry,
+                        uv_map,
+                        bx,
+                        by,
+                        bz,
+                    );
+                } else if let Some(baked) = registry.get_baked_model(state) {
                     emit_baked_model(
                         &mut vertices,
                         &mut indices,
@@ -309,16 +322,71 @@ fn is_air_like(state: azalea_block::BlockState) -> bool {
     let block: Box<dyn azalea_block::BlockTrait> = state.into();
     matches!(
         block.id(),
-        "cave_air"
-            | "void_air"
-            | "light"
-            | "barrier"
-            | "structure_void"
-            | "water"
-            | "lava"
-            | "bubble_column"
-            | "moving_piston"
+        "cave_air" | "void_air" | "light" | "barrier" | "structure_void" | "moving_piston"
     )
+}
+
+fn fluid_id(state: azalea_block::BlockState) -> Option<&'static str> {
+    let block: Box<dyn azalea_block::BlockTrait> = state.into();
+    match block.id() {
+        "water" | "bubble_column" => Some("water"),
+        "lava" => Some("lava"),
+        _ => None,
+    }
+}
+
+// TODO: biome-based water color
+// TODO: per-corner height averaging for smooth water surfaces
+// TODO: flowing water texture (water_flow) with direction-based rotation
+// TODO: per-level height for flowing water (level / 9.0 per corner)
+
+const FLUID_MAX_HEIGHT: f32 = 8.0 / 9.0;
+
+fn emit_fluid(
+    vertices: &mut Vec<ChunkVertex>,
+    indices: &mut Vec<u32>,
+    block_pos: [f32; 3],
+    fluid: &str,
+    snapshot: &ChunkStoreSnapshot,
+    registry: &BlockRegistry,
+    uv_map: &AtlasUVMap,
+    bx: i32,
+    by: i32,
+    bz: i32,
+) {
+    let (tex_name, tint) = if fluid == "lava" {
+        ("lava_still", [1.0, 1.0, 1.0])
+    } else {
+        ("water_still", [0.247, 0.463, 0.894])
+    };
+    let region = uv_map.get_region(tex_name);
+
+    for dir in &CUBE_FACE_DIRS {
+        let offset = dir.offset();
+        let neighbor = snapshot.get_block_state(bx + offset[0], by + offset[1], bz + offset[2]);
+
+        if fluid_id(neighbor).is_some() || registry.is_opaque_full_cube(neighbor) {
+            continue;
+        }
+
+        let (mut positions, uvs, light) = cube_face_geometry(*dir);
+
+        if matches!(dir, Direction::Up) {
+            let above = snapshot.get_block_state(bx, by + 1, bz);
+            let top = if fluid_id(above).is_some() {
+                1.0
+            } else {
+                FLUID_MAX_HEIGHT
+            };
+            for p in &mut positions {
+                p[1] = top;
+            }
+        }
+
+        emit_face(
+            vertices, indices, block_pos, &positions, &uvs, light, region, tint,
+        );
+    }
 }
 
 const MISSING_TINT: [f32; 3] = [1.0, 0.0, 1.0];
