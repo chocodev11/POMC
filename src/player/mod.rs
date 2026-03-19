@@ -11,8 +11,12 @@ const DROWN_DAMAGE: f32 = 2.0;
 const AIR_RECOVERY_RATE: i32 = 4;
 
 fn is_water_block(state: azalea_block::BlockState) -> bool {
+    if state.is_air() {
+        return false;
+    }
     let block: Box<dyn azalea_block::BlockTrait> = state.into();
-    if matches!(block.id(), "water" | "bubble_column") {
+    let id = block.id();
+    if id == "water" || id == "bubble_column" {
         return true;
     }
     block
@@ -90,11 +94,12 @@ impl LocalPlayer {
         let max_z = (self.position.z + half_w).floor() as i32;
 
         let mut touching_water = false;
-        for bx in min_x..=max_x {
+        'water_check: for bx in min_x..=max_x {
             for by in min_y..=max_y {
                 for bz in min_z..=max_z {
                     if is_water_block(chunks.get_block_state(bx, by, bz)) {
                         touching_water = true;
+                        break 'water_check;
                     }
                 }
             }

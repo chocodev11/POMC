@@ -1,7 +1,6 @@
 mod args;
 mod assets;
 mod data;
-mod downloader;
 mod net;
 mod physics;
 mod player;
@@ -15,8 +14,6 @@ use std::sync::Arc;
 use clap::Parser;
 
 use net::connection::ConnectArgs;
-
-const DEFAULT_VERSION: &str = "1.21.11";
 
 fn main() {
     env_logger::init();
@@ -32,11 +29,6 @@ fn main() {
     log::info!("Data directory: {}", data.root.display());
 
     let rt = Arc::new(tokio::runtime::Runtime::new().expect("failed to create tokio runtime"));
-    let version = args
-        .version
-        .as_deref()
-        .unwrap_or(DEFAULT_VERSION)
-        .to_string();
 
     let connection = if let Some(ref server) = args.server {
         let connect_args = ConnectArgs {
@@ -56,7 +48,12 @@ fn main() {
         None
     };
 
-    if let Err(e) = window::run(connection, data, version, rt) {
+    if let Err(e) = window::run(
+        connection,
+        data.assets_dir.clone(),
+        data.instance_dir.clone(),
+        rt,
+    ) {
         log::error!("Fatal: {e}");
         std::process::exit(1);
     }

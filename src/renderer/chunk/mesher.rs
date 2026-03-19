@@ -34,7 +34,7 @@ fn tint_color(tint: Tint) -> [f32; 3] {
     }
 }
 
-const MAX_MESH_UPLOADS_PER_FRAME: usize = 256;
+const MAX_MESH_UPLOADS_PER_FRAME: usize = 16;
 
 pub struct MeshDispatcher {
     result_rx: crossbeam_channel::Receiver<ChunkMeshData>,
@@ -147,13 +147,19 @@ fn mesh_chunk_snapshot(
 
             for by in min_y..max_y {
                 let state = snapshot.get_block_state(bx, by, bz);
-                if is_air_like(state) {
+                let kind = classify_block(state);
+                if matches!(kind, BlockKind::Air) {
                     continue;
                 }
 
                 let block_pos = [bx as f32, by as f32, bz as f32];
 
-                if let Some(fluid) = fluid_id(state) {
+                if let BlockKind::Water | BlockKind::Lava = kind {
+                    let fluid = if matches!(kind, BlockKind::Lava) {
+                        "lava"
+                    } else {
+                        "water"
+                    };
                     emit_fluid(
                         &mut vertices,
                         &mut indices,
@@ -317,23 +323,25 @@ fn emit_cube_faces(
     }
 }
 
-fn is_air_like(state: azalea_block::BlockState) -> bool {
-    if state.is_air() {
-        return true;
-    }
-    let block: Box<dyn azalea_block::BlockTrait> = state.into();
-    matches!(
-        block.id(),
-        "cave_air" | "void_air" | "light" | "barrier" | "structure_void" | "moving_piston"
-    )
+enum BlockKind {
+    Air,
+    Water,
+    Lava,
+    Solid,
 }
 
-fn fluid_id(state: azalea_block::BlockState) -> Option<&'static str> {
+fn classify_block(state: azalea_block::BlockState) -> BlockKind {
+    if state.is_air() {
+        return BlockKind::Air;
+    }
     let block: Box<dyn azalea_block::BlockTrait> = state.into();
     match block.id() {
-        "water" | "bubble_column" => Some("water"),
-        "lava" => Some("lava"),
-        _ => None,
+        "cave_air" | "void_air" | "light" | "barrier" | "structure_void" | "moving_piston" => {
+            BlockKind::Air
+        }
+        "water" | "bubble_column" => BlockKind::Water,
+        "lava" => BlockKind::Lava,
+        _ => BlockKind::Solid,
     }
 }
 
@@ -368,7 +376,9 @@ fn emit_fluid(
         let offset = dir.offset();
         let neighbor = snapshot.get_block_state(bx + offset[0], by + offset[1], bz + offset[2]);
 
-        if fluid_id(neighbor).is_some() || registry.is_opaque_full_cube(neighbor) {
+        if matches!(classify_block(neighbor), BlockKind::Water | BlockKind::Lava)
+            || registry.is_opaque_full_cube(neighbor)
+        {
             continue;
         }
 
@@ -376,7 +386,7 @@ fn emit_fluid(
 
         if matches!(dir, Direction::Up) {
             let above = snapshot.get_block_state(bx, by + 1, bz);
-            let top = if fluid_id(above).is_some() {
+            let top = if matches!(classify_block(above), BlockKind::Water | BlockKind::Lava) {
                 1.0
             } else {
                 FLUID_MAX_HEIGHT

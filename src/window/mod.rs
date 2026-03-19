@@ -97,8 +97,6 @@ struct App {
     last_sent_horizontal_collision: bool,
     was_sprinting: bool,
     position_send_counter: u32,
-    version: String,
-    data: Option<crate::data::DataDir>,
     options_from_game: bool,
 }
 
@@ -131,8 +129,8 @@ impl FpsCounter {
 impl App {
     fn new(
         connection: Option<crate::net::connection::ConnectionHandle>,
-        data: crate::data::DataDir,
-        version: String,
+        assets_dir: std::path::PathBuf,
+        game_dir: std::path::PathBuf,
         tokio_rt: Arc<tokio::runtime::Runtime>,
     ) -> Self {
         let (net_events, chat_sender, packet_sender) = match connection {
@@ -148,9 +146,6 @@ impl App {
         } else {
             GameState::Menu
         };
-
-        let assets_dir = data.assets_dir.clone();
-        let game_dir = data.instance_dir.clone();
 
         Self {
             window: None,
@@ -168,8 +163,6 @@ impl App {
             state,
             menu: MainMenu::new(&game_dir, Arc::clone(&tokio_rt)),
             tokio_rt,
-            version,
-            data: Some(data),
             options_from_game: false,
             player: LocalPlayer::new(),
             tick_accumulator: 0.0,
@@ -261,8 +254,13 @@ impl App {
         let Some(rx) = &self.net_events else { return };
         let mut chunks_to_mesh = Vec::new();
         let mut disconnect_reason: Option<String> = None;
+        let mut processed = 0u32;
 
         while let Ok(event) = rx.try_recv() {
+            processed += 1;
+            if processed > 512 {
+                break;
+            }
             match event {
                 NetworkEvent::Connected => {
                     log::info!("Connected to server");
@@ -585,9 +583,6 @@ impl ApplicationHandler for App {
             &self.assets_dir,
             &self.asset_index,
             &self.game_dir,
-            self.data.as_ref(),
-            &self.version,
-            &self.tokio_rt,
         ) {
             Ok(r) => r,
             Err(e) => {
@@ -1077,12 +1072,12 @@ impl ApplicationHandler for App {
 
 pub fn run(
     connection: Option<crate::net::connection::ConnectionHandle>,
-    data: crate::data::DataDir,
-    version: String,
+    assets_dir: std::path::PathBuf,
+    game_dir: std::path::PathBuf,
     tokio_rt: Arc<tokio::runtime::Runtime>,
 ) -> Result<(), WindowError> {
     let event_loop = EventLoop::new()?;
-    let mut app = App::new(connection, data, version, tokio_rt);
+    let mut app = App::new(connection, assets_dir, game_dir, tokio_rt);
     event_loop.run_app(&mut app)?;
     Ok(())
 }

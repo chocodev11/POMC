@@ -83,9 +83,6 @@ impl Renderer {
         assets_dir: &Path,
         asset_index: &Option<AssetIndex>,
         game_dir: &Path,
-        data: Option<&crate::data::DataDir>,
-        version: &str,
-        tokio_rt: &tokio::runtime::Runtime,
     ) -> Result<Self, RendererError> {
         let size = window.inner_size();
 
@@ -124,44 +121,6 @@ impl Renderer {
         let sw = size.width.max(1) as f32;
         let sh = size.height.max(1) as f32;
         window.set_visible(true);
-
-        if let Some(data) = data {
-            if crate::downloader::needs_download(data) {
-                Self::render_splash(
-                    &ctx,
-                    &swapchain_state,
-                    &mut menu_pipeline,
-                    sw,
-                    sh,
-                    0.0,
-                    "Downloading assets...",
-                )?;
-                let menu_ptr = &mut menu_pipeline as *mut MenuOverlayPipeline;
-                let result = tokio_rt.block_on(crate::downloader::download_assets_with_progress(
-                    data,
-                    version,
-                    &|p| {
-                        let frac = if p.total > 0 {
-                            p.downloaded as f32 / p.total as f32
-                        } else {
-                            0.0
-                        };
-                        let _ = Self::render_splash(
-                            &ctx,
-                            &swapchain_state,
-                            unsafe { &mut *menu_ptr },
-                            sw,
-                            sh,
-                            frac,
-                            &p.status,
-                        );
-                    },
-                ));
-                if let Err(e) = result {
-                    log::error!("Asset download failed: {e}");
-                }
-            }
-        }
 
         let splash = |menu: &mut MenuOverlayPipeline, progress: f32, status: &str| {
             let _ = Self::render_splash(&ctx, &swapchain_state, menu, sw, sh, progress, status);
