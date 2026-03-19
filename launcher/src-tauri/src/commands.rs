@@ -280,10 +280,16 @@ pub async fn launch_game(
 }
 
 fn find_client_binary() -> Result<std::path::PathBuf, String> {
+    #[cfg(target_family = "windows")]
+    const EXENAME : &'static str = "pomc.exe";
+
+    #[cfg(target_family = "unix")]
+    const EXENAME : &'static str = "pomc";
+
     let candidates = [
         std::env::current_exe()
             .ok()
-            .and_then(|p| p.parent().map(|d| d.join("pomc.exe"))),
+            .and_then(|p| p.parent().map(|d| d.join(EXENAME))),
         std::env::current_exe()
             .ok()
             .and_then(|p| {
@@ -291,7 +297,7 @@ fn find_client_binary() -> Result<std::path::PathBuf, String> {
                     .parent()?
                     .parent()?
                     .parent()
-                    .map(|d| d.join("target").join("release").join("pomc.exe"))
+                    .map(|d| d.join("target").join("release").join(EXENAME))
             }),
         std::env::current_exe()
             .ok()
@@ -300,7 +306,30 @@ fn find_client_binary() -> Result<std::path::PathBuf, String> {
                     .parent()?
                     .parent()?
                     .parent()
-                    .map(|d| d.join("target").join("debug").join("pomc.exe"))
+                    .map(|d| d.join("target").join("debug").join(EXENAME))
+            }),
+
+        // when launched from inside the `launcher` directory (at least on linux), this is required
+        std::env::current_exe()
+            .ok()
+            .and_then(|p| {
+                p.parent()?
+                    .parent()?
+                    .parent()?
+                    .parent()?
+                    .parent()
+                    .map(|d| d.join("target").join("release").join(EXENAME))
+            }),
+
+        std::env::current_exe()
+            .ok()
+            .and_then(|p| {
+                p.parent()?
+                    .parent()?
+                    .parent()?
+                    .parent()?
+                    .parent()
+                    .map(|d| d.join("target").join("debug").join(EXENAME))
             }),
     ];
 
