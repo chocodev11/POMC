@@ -7,6 +7,7 @@ use std::sync::Arc;
 use azalea_block::BlockState;
 use azalea_core::position::{BlockPos, ChunkPos};
 use azalea_inventory::ItemStack;
+use azalea_registry::builtin::EntityKind;
 use azalea_world::heightmap::HeightmapKind;
 
 pub enum NetworkEvent {
@@ -71,6 +72,33 @@ pub enum NetworkEvent {
     },
     ServerSimulationDistance {
         distance: u32,
+    },
+    EntitySpawned {
+        id: i32,
+        entity_type: EntityKind,
+        x: f64,
+        y: f64,
+        z: f64,
+    },
+    EntityRemoved {
+        ids: Vec<i32>,
+    },
+    EntityItemData {
+        id: i32,
+        item_name: String,
+        count: i32,
+    },
+    EntityMoved {
+        id: i32,
+        dx: f64,
+        dy: f64,
+        dz: f64,
+    },
+    EntityTeleported {
+        id: i32,
+        x: f64,
+        y: f64,
+        z: f64,
     },
     Disconnected {
         reason: String,

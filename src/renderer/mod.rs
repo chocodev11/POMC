@@ -47,12 +47,13 @@ pub enum RendererError {
     Vulkan(#[from] vk::Result),
 }
 
-enum RenderMode {
+enum RenderMode<'a> {
     World {
         overlay: Vec<MenuElement>,
         swing_progress: f32,
         destroy_info: Option<(BlockPos, u32)>,
         sky: SkyState,
+        item_entities: &'a [pipelines::item_entity::ItemRenderInfo],
     },
     MainMenu {
         scroll: f32,
@@ -86,6 +87,7 @@ pub struct Renderer {
     menu_pipeline: MenuOverlayPipeline,
     blur_pipeline: BlurPipeline,
     skin_preview: SkinPreviewPipeline,
+    item_entity_pipeline: pipelines::item_entity::ItemEntityPipeline,
     chunk_buffers: ChunkBufferStore,
     swapchain_dirty: bool,
     width: u32,
@@ -233,6 +235,13 @@ impl Renderer {
 
         let chunk_buffers = ChunkBufferStore::new(&ctx.device, &ctx.allocator);
 
+        let item_entity_pipeline = pipelines::item_entity::ItemEntityPipeline::new(
+            &ctx.device,
+            swapchain_state.render_pass,
+            &ctx.allocator,
+            &atlas,
+        );
+
         Ok(Self {
             ctx,
             swapchain: swapchain_state,
@@ -247,6 +256,7 @@ impl Renderer {
             menu_pipeline,
             blur_pipeline,
             skin_preview,
+            item_entity_pipeline,
             chunk_buffers,
             swapchain_dirty: false,
             width: size.width.max(1),
@@ -468,6 +478,8 @@ impl Renderer {
             .recreate_pipeline(&self.ctx.device, self.swapchain.render_pass);
         self.skin_preview
             .recreate_pipeline(&self.ctx.device, self.swapchain.render_pass);
+        self.item_entity_pipeline
+            .recreate_pipeline(&self.ctx.device, self.swapchain.render_pass);
         self.blur_pipeline.resize(
             &self.ctx.device,
             &self.ctx.allocator,
@@ -551,6 +563,7 @@ impl Renderer {
         MeshDispatcher::new(self.registry.clone(), self.atlas.uv_map.clone())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn render_world(
         &mut self,
         window: &Window,
@@ -559,6 +572,7 @@ impl Renderer {
         swing_progress: f32,
         destroy_info: Option<(BlockPos, u32)>,
         sky: SkyState,
+        item_entities: &[pipelines::item_entity::ItemRenderInfo],
     ) -> Result<(), RendererError> {
         self.render_frame(
             window,
@@ -569,6 +583,7 @@ impl Renderer {
                 swing_progress,
                 destroy_info,
                 sky,
+                item_entities,
             },
         )
     }
@@ -643,6 +658,18 @@ impl Renderer {
         self.menu_pipeline.text_width(text, scale)
     }
 
+    pub fn ensure_item_mesh(&mut self, name: &str) {
+        if let Some(model) = self.registry.get_baked_model_by_name(name) {
+            self.item_entity_pipeline.ensure_mesh(
+                &self.ctx.device,
+                &self.ctx.allocator,
+                name,
+                model,
+                &self.atlas.uv_map,
+            );
+        }
+    }
+
     fn render_frame(
         &mut self,
         window: &Window,
@@ -688,6 +715,7 @@ impl Renderer {
             let uniform = CameraUniform::from_camera(&self.camera);
             self.chunk_pipeline.update_camera(frame, &uniform);
             self.block_overlay_pipeline.update_camera(frame, &uniform);
+            self.item_entity_pipeline.update_camera(frame, &uniform);
         }
 
         if hide_cursor {
@@ -785,6 +813,7 @@ impl Renderer {
                     swing_progress,
                     destroy_info,
                     sky,
+                    item_entities,
                 } => {
                     self.sky_pipeline.update_and_draw(
                         &self.ctx.device,
@@ -809,6 +838,9 @@ impl Renderer {
                             *stage,
                         );
                     }
+
+                    self.item_entity_pipeline
+                        .draw(&self.ctx.device, cmd, frame, item_entities);
 
                     let clear_attachment = vk::ClearAttachment {
                         aspect_mask: vk::ImageAspectFlags::DEPTH,
@@ -1038,6 +1070,8 @@ impl Drop for Renderer {
         self.blur_pipeline
             .destroy(&self.ctx.device, &self.ctx.allocator);
         self.skin_preview
+            .destroy(&self.ctx.device, &self.ctx.allocator);
+        self.item_entity_pipeline
             .destroy(&self.ctx.device, &self.ctx.allocator);
         self.atlas.destroy(&self.ctx.device, &self.ctx.allocator);
         self.swapchain.destroy(

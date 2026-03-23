@@ -120,6 +120,7 @@ struct App {
     server_render_distance: u32,
     server_simulation_distance: u32,
     pending_skin_uuid: Option<uuid::Uuid>,
+    entity_store: crate::entity::EntityStore,
 }
 
 struct FpsCounter {
@@ -191,6 +192,7 @@ impl App {
             server_render_distance: 0,
             server_simulation_distance: 0,
             pending_skin_uuid: None,
+            entity_store: crate::entity::EntityStore::new(),
             player: LocalPlayer::new(),
             tick_accumulator: 0.0,
             prev_player_pos: glam::Vec3::ZERO,
@@ -320,6 +322,7 @@ impl App {
         self.paused = false;
         self.position_set = false;
         self.chunk_store = ChunkStore::new(self.menu.render_distance);
+        self.entity_store.clear();
         if let Some(renderer) = &mut self.renderer {
             renderer.clear_chunk_meshes();
             self.mesh_dispatcher = Some(renderer.create_mesh_dispatcher());
@@ -471,6 +474,34 @@ impl App {
                 } => {
                     self.sky_state.game_time = game_time;
                     self.sky_state.day_time = day_time;
+                }
+                NetworkEvent::EntitySpawned {
+                    id,
+                    entity_type,
+                    x,
+                    y,
+                    z,
+                } => {
+                    if entity_type == azalea_registry::builtin::EntityKind::Item {
+                        self.entity_store.spawn_item(id, glam::DVec3::new(x, y, z));
+                    }
+                }
+                NetworkEvent::EntityRemoved { ids } => {
+                    self.entity_store.remove(&ids);
+                }
+                NetworkEvent::EntityItemData {
+                    id,
+                    item_name,
+                    count,
+                } => {
+                    log::trace!("Item data: id={id} name={item_name} count={count}");
+                    self.entity_store.set_item_data(id, item_name, count);
+                }
+                NetworkEvent::EntityMoved { id, dx, dy, dz } => {
+                    self.entity_store.move_delta(id, dx, dy, dz);
+                }
+                NetworkEvent::EntityTeleported { id, x, y, z } => {
+                    self.entity_store.teleport(id, glam::DVec3::new(x, y, z));
                 }
                 NetworkEvent::Disconnected { reason } => {
                     log::warn!("Disconnected: {reason}");
@@ -1005,6 +1036,7 @@ impl ApplicationHandler for App {
                                 self.tick_accumulator += dt;
                                 while self.tick_accumulator >= TICK_RATE {
                                     self.tick_physics();
+                                    self.entity_store.tick();
                                     self.tick_accumulator -= TICK_RATE;
                                 }
                             }
@@ -1165,6 +1197,22 @@ impl ApplicationHandler for App {
                                     game_time: self.sky_state.game_time,
                                     rain_level: self.sky_state.rain_level,
                                 };
+
+                                let cam_pos = glam::DVec3::new(
+                                    self.player.position.x as f64,
+                                    self.player.position.y as f64,
+                                    self.player.position.z as f64,
+                                );
+                                let partial_tick = self.tick_accumulator / TICK_RATE;
+                                let item_renders = build_item_render_infos(
+                                    &self.entity_store,
+                                    cam_pos,
+                                    partial_tick,
+                                );
+                                for info in &item_renders {
+                                    renderer.ensure_item_mesh(&info.item_name);
+                                }
+
                                 if let Err(e) = renderer.render_world(
                                     window,
                                     hide_cursor,
@@ -1172,6 +1220,7 @@ impl ApplicationHandler for App {
                                     swing_progress,
                                     destroy_info,
                                     sky,
+                                    &item_renders,
                                 ) {
                                     log::error!("Render error: {e}");
                                 }
@@ -1260,6 +1309,30 @@ fn chunk_lod(pos: azalea_core::position::ChunkPos, player: azalea_core::position
     } else {
         2
     }
+}
+
+fn build_item_render_infos(
+    entity_store: &crate::entity::EntityStore,
+    camera_pos: glam::DVec3,
+    partial_tick: f32,
+) -> Vec<crate::renderer::pipelines::item_entity::ItemRenderInfo> {
+    entity_store
+        .visible_items(camera_pos, 64.0)
+        .iter()
+        .map(|item| {
+            let age_f = item.age as f32 + partial_tick;
+            let bob_y = (age_f / 10.0 + item.bob_offset).sin() * 0.1 + 0.1;
+            let spin = age_f / 20.0 + item.bob_offset;
+            let pos = item.position.as_vec3();
+            let model = glam::Mat4::from_translation(pos + glam::Vec3::new(0.0, bob_y, 0.0))
+                * glam::Mat4::from_rotation_y(spin)
+                * glam::Mat4::from_scale(glam::Vec3::splat(0.25));
+            crate::renderer::pipelines::item_entity::ItemRenderInfo {
+                item_name: item.item_name.clone(),
+                model_matrix: model,
+            }
+        })
+        .collect()
 }
 
 pub fn run(
