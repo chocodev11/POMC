@@ -6,7 +6,7 @@ use glam::Mat4;
 use gpu_allocator::vulkan::{Allocation, Allocator};
 
 use crate::renderer::camera::CameraUniform;
-use crate::renderer::chunk::atlas::{AtlasUVMap, TextureAtlas};
+use crate::renderer::chunk::atlas::{AtlasRegion, AtlasUVMap, TextureAtlas};
 use crate::renderer::chunk::mesher::ChunkVertex;
 use crate::renderer::shader;
 use crate::renderer::util;
@@ -158,6 +158,31 @@ impl ItemEntityPipeline {
             .copy_from_slice(bytes);
     }
 
+    fn insert_mesh(
+        &mut self,
+        device: &ash::Device,
+        allocator: &Arc<Mutex<Allocator>>,
+        name: &str,
+        vertices: &[ChunkVertex],
+    ) {
+        let bytes = bytemuck::cast_slice(vertices);
+        let (buffer, allocation) = util::create_mapped_buffer(
+            device,
+            allocator,
+            bytes,
+            vk::BufferUsageFlags::VERTEX_BUFFER,
+            &format!("item_{name}"),
+        );
+        self.meshes.insert(
+            name.to_string(),
+            MeshEntry {
+                buffer,
+                allocation,
+                vertex_count: vertices.len() as u32,
+            },
+        );
+    }
+
     pub fn ensure_mesh(
         &mut self,
         device: &ash::Device,
@@ -170,25 +195,27 @@ impl ItemEntityPipeline {
             return;
         }
         let vertices = build_item_mesh(model, uv_map);
-        if vertices.is_empty() {
+        if !vertices.is_empty() {
+            self.insert_mesh(device, allocator, name, &vertices);
+        }
+    }
+
+    pub fn ensure_flat_mesh(
+        &mut self,
+        device: &ash::Device,
+        allocator: &Arc<Mutex<Allocator>>,
+        name: &str,
+        uv_map: &AtlasUVMap,
+    ) {
+        if self.meshes.contains_key(name) {
             return;
         }
-        let bytes = bytemuck::cast_slice(&vertices);
-        let (buffer, allocation) = util::create_mapped_buffer(
-            device,
-            allocator,
-            bytes,
-            vk::BufferUsageFlags::VERTEX_BUFFER,
-            &format!("item_mesh_{name}"),
-        );
-        self.meshes.insert(
-            name.to_string(),
-            MeshEntry {
-                buffer,
-                allocation,
-                vertex_count: vertices.len() as u32,
-            },
-        );
+        let tex_key = format!("minecraft:textures/item/{name}.png");
+        if !uv_map.has_region(&tex_key) {
+            return;
+        }
+        let vertices = build_flat_quad(uv_map.get_region(&tex_key));
+        self.insert_mesh(device, allocator, name, &vertices);
     }
 
     pub fn draw(
@@ -293,6 +320,36 @@ fn build_item_mesh(model: &BakedModel, uv_map: &AtlasUVMap) -> Vec<ChunkVertex> 
         }
     }
     vertices
+}
+
+fn build_flat_quad(region: AtlasRegion) -> Vec<ChunkVertex> {
+    let h = 0.5;
+    let positions = [
+        [-h, 0.0, 0.0],
+        [h, 0.0, 0.0],
+        [h, 1.0 - h, 0.0],
+        [-h, 0.0, 0.0],
+        [h, 1.0 - h, 0.0],
+        [-h, 1.0 - h, 0.0],
+    ];
+    let uvs = [
+        [region.u_min, region.v_max],
+        [region.u_max, region.v_max],
+        [region.u_max, region.v_min],
+        [region.u_min, region.v_max],
+        [region.u_max, region.v_min],
+        [region.u_min, region.v_min],
+    ];
+    positions
+        .iter()
+        .zip(uvs.iter())
+        .map(|(p, uv)| ChunkVertex {
+            position: *p,
+            tex_coords: *uv,
+            light: 1.0,
+            tint: [1.0, 1.0, 1.0],
+        })
+        .collect()
 }
 
 fn create_pipeline(

@@ -26,6 +26,10 @@ impl AtlasUVMap {
     pub fn get_region(&self, name: &str) -> AtlasRegion {
         self.regions.get(name).copied().unwrap_or(self.missing)
     }
+
+    pub fn has_region(&self, name: &str) -> bool {
+        self.regions.contains_key(name)
+    }
 }
 
 pub struct TextureAtlas {
