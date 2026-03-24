@@ -1,6 +1,7 @@
 pub mod block_overlay;
 pub mod blur;
 pub mod chunk;
+pub mod cloud;
 pub mod hand;
 pub mod menu_overlay;
 pub mod panorama;

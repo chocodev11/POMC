@@ -86,6 +86,7 @@ pub struct Renderer {
     menu_pipeline: MenuOverlayPipeline,
     blur_pipeline: BlurPipeline,
     skin_preview: SkinPreviewPipeline,
+    cloud_pipeline: pipelines::cloud::CloudPipeline,
     chunk_buffers: ChunkBufferStore,
     swapchain_dirty: bool,
     width: u32,
@@ -233,6 +234,16 @@ impl Renderer {
 
         let chunk_buffers = ChunkBufferStore::new(&ctx.device, &ctx.allocator);
 
+        let cloud_pipeline = pipelines::cloud::CloudPipeline::new(
+            &ctx.device,
+            swapchain_state.render_pass,
+            &ctx.allocator,
+            ctx.graphics_queue,
+            ctx.command_pool,
+            assets_dir,
+            asset_index,
+        );
+
         Ok(Self {
             ctx,
             swapchain: swapchain_state,
@@ -247,6 +258,7 @@ impl Renderer {
             menu_pipeline,
             blur_pipeline,
             skin_preview,
+            cloud_pipeline,
             chunk_buffers,
             swapchain_dirty: false,
             width: size.width.max(1),
@@ -467,6 +479,8 @@ impl Renderer {
         self.menu_pipeline
             .recreate_pipeline(&self.ctx.device, self.swapchain.render_pass);
         self.skin_preview
+            .recreate_pipeline(&self.ctx.device, self.swapchain.render_pass);
+        self.cloud_pipeline
             .recreate_pipeline(&self.ctx.device, self.swapchain.render_pass);
         self.blur_pipeline.resize(
             &self.ctx.device,
@@ -800,6 +814,9 @@ impl Renderer {
                         .draw_indirect(&self.ctx.device, cmd, frame);
                     let cull_ms = t_cull.elapsed().as_secs_f32() * 1000.0;
 
+                    self.cloud_pipeline
+                        .draw(&self.ctx.device, cmd, frame, &self.camera, sky);
+
                     if let Some((block_pos, stage)) = destroy_info {
                         self.block_overlay_pipeline.draw(
                             &self.ctx.device,
@@ -1038,6 +1055,8 @@ impl Drop for Renderer {
         self.blur_pipeline
             .destroy(&self.ctx.device, &self.ctx.allocator);
         self.skin_preview
+            .destroy(&self.ctx.device, &self.ctx.allocator);
+        self.cloud_pipeline
             .destroy(&self.ctx.device, &self.ctx.allocator);
         self.atlas.destroy(&self.ctx.device, &self.ctx.allocator);
         self.swapchain.destroy(

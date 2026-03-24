@@ -31,6 +31,8 @@ fn main() {
         ("cull.comp", shaderc::ShaderKind::Compute),
         ("blur.vert", shaderc::ShaderKind::Vertex),
         ("blur.frag", shaderc::ShaderKind::Fragment),
+        ("cloud.vert", shaderc::ShaderKind::Vertex),
+        ("cloud.frag", shaderc::ShaderKind::Fragment),
     ];
 
     for (file, kind) in &shaders {
