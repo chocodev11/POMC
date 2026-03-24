@@ -100,6 +100,9 @@ pub enum NetworkEvent {
         y: f64,
         z: f64,
     },
+    ItemPickedUp {
+        item_id: i32,
+    },
     Disconnected {
         reason: String,
     },

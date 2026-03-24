@@ -8,14 +8,34 @@ pub struct ItemEntity {
     pub bob_offset: f32,
 }
 
+struct PickupAnimation {
+    item_name: String,
+    start_pos: glam::DVec3,
+    target_pos: glam::DVec3,
+    bob_offset: f32,
+    age: u32,
+    life: u32,
+}
+
+pub struct PickupRenderInfo {
+    pub item_name: String,
+    pub position: glam::DVec3,
+    pub bob_offset: f32,
+    pub age: u32,
+}
+
+const PICKUP_LIFE: u32 = 3;
+
 pub struct EntityStore {
     items: HashMap<i32, ItemEntity>,
+    pickups: Vec<PickupAnimation>,
 }
 
 impl EntityStore {
     pub fn new() -> Self {
         Self {
             items: HashMap::new(),
+            pickups: Vec::new(),
         }
     }
 
@@ -55,6 +75,21 @@ impl EntityStore {
         }
     }
 
+    pub fn pickup(&mut self, item_id: i32, target_pos: glam::DVec3) {
+        if let Some(entity) = self.items.remove(&item_id) {
+            if !entity.item_name.is_empty() {
+                self.pickups.push(PickupAnimation {
+                    item_name: entity.item_name,
+                    start_pos: entity.position,
+                    target_pos,
+                    bob_offset: entity.bob_offset,
+                    age: entity.age,
+                    life: 0,
+                });
+            }
+        }
+    }
+
     pub fn remove(&mut self, ids: &[i32]) {
         for &id in ids {
             self.items.remove(&id);
@@ -65,6 +100,10 @@ impl EntityStore {
         for entity in self.items.values_mut() {
             entity.age += 1;
         }
+        for pickup in &mut self.pickups {
+            pickup.life += 1;
+        }
+        self.pickups.retain(|p| p.life < PICKUP_LIFE);
     }
 
     pub fn visible_items(&self, camera_pos: glam::DVec3, max_dist: f64) -> Vec<&ItemEntity> {
@@ -77,7 +116,24 @@ impl EntityStore {
             .collect()
     }
 
+    pub fn active_pickups(&self, partial_tick: f32) -> Vec<PickupRenderInfo> {
+        self.pickups
+            .iter()
+            .map(|p| {
+                let t = (p.life as f32 + partial_tick) / PICKUP_LIFE as f32;
+                let pos = p.start_pos.lerp(p.target_pos, t as f64);
+                PickupRenderInfo {
+                    item_name: p.item_name.clone(),
+                    position: pos,
+                    bob_offset: p.bob_offset,
+                    age: p.age,
+                }
+            })
+            .collect()
+    }
+
     pub fn clear(&mut self) {
         self.items.clear();
+        self.pickups.clear();
     }
 }

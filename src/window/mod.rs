@@ -503,6 +503,14 @@ impl App {
                 NetworkEvent::EntityTeleported { id, x, y, z } => {
                     self.entity_store.teleport(id, glam::DVec3::new(x, y, z));
                 }
+                NetworkEvent::ItemPickedUp { item_id } => {
+                    let player_pos = glam::DVec3::new(
+                        self.player.position.x as f64,
+                        self.player.position.y as f64 + 0.81,
+                        self.player.position.z as f64,
+                    );
+                    self.entity_store.pickup(item_id, player_pos);
+                }
                 NetworkEvent::Disconnected { reason } => {
                     log::warn!("Disconnected: {reason}");
                     disconnect_reason = Some(reason);
@@ -1363,6 +1371,20 @@ fn build_item_render_infos(
             });
         }
     }
+
+    for pickup in entity_store.active_pickups(partial_tick) {
+        let pos = pickup.position.as_vec3();
+        let age_f = pickup.age as f32 + partial_tick;
+        let spin = age_f / 20.0 + pickup.bob_offset;
+        let model = glam::Mat4::from_translation(pos)
+            * glam::Mat4::from_rotation_y(spin)
+            * glam::Mat4::from_scale(glam::Vec3::splat(0.25));
+        infos.push(crate::renderer::pipelines::item_entity::ItemRenderInfo {
+            item_name: pickup.item_name,
+            model_matrix: model,
+        });
+    }
+
     infos
 }
 
