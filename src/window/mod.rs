@@ -838,6 +838,11 @@ impl ApplicationHandler for App {
                                         KeyCode::F3 => {
                                             self.show_debug = !self.show_debug;
                                         }
+                                        KeyCode::F5 => {
+                                            if let Some(r) = &mut self.renderer {
+                                                r.cycle_camera_mode();
+                                            }
+                                        }
                                         _ => {}
                                     }
                                 }
