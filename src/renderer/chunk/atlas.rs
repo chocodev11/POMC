@@ -39,6 +39,7 @@ pub struct TextureAtlas {
 }
 
 impl TextureAtlas {
+    #[allow(clippy::too_many_arguments)]
     pub fn build(
         device: &ash::Device,
         queue: vk::Queue,
@@ -47,6 +48,7 @@ impl TextureAtlas {
         assets_dir: &Path,
         asset_index: &Option<AssetIndex>,
         texture_names: &HashSet<&str>,
+        packs: Option<&crate::resource_pack::ResourcePackManager>,
     ) -> Result<Self, vk::Result> {
         let tile_size = 16u32;
         let grid_size = (texture_names.len() as f32 + 1.0).sqrt().ceil() as u32 + 1;
@@ -75,7 +77,7 @@ impl TextureAtlas {
 
         for &name in texture_names {
             let asset_key = format!("minecraft/textures/block/{name}.png");
-            let file_path = resolve_asset_path(assets_dir, asset_index, &asset_key);
+            let file_path = resolve_asset_path(assets_dir, asset_index, &asset_key, packs);
             let (data, img_w, img_h) = match util::load_png(&file_path) {
                 Some(p) => p,
                 None => {

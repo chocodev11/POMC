@@ -129,6 +129,15 @@ pub enum NetworkEvent {
         id: i32,
         is_baby: bool,
     },
+    ResourcePackPush {
+        id: uuid::Uuid,
+        url: String,
+        hash: String,
+        required: bool,
+    },
+    ResourcePackPop {
+        id: Option<uuid::Uuid>,
+    },
     Disconnected {
         reason: String,
     },

@@ -45,7 +45,12 @@ pub struct GlyphMap {
 
 impl GlyphMap {
     pub fn load(assets_dir: &Path, asset_index: &Option<AssetIndex>) -> Option<Self> {
-        let path = resolve_asset_path(assets_dir, asset_index, "minecraft/textures/font/ascii.png");
+        let path = resolve_asset_path(
+            assets_dir,
+            asset_index,
+            "minecraft/textures/font/ascii.png",
+            None,
+        );
         let img = load_image(&path)
             .map_err(|e| log::warn!("Failed to load MC font: {e}"))
             .ok()?

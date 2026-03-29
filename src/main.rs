@@ -6,6 +6,7 @@ mod net;
 mod physics;
 mod player;
 mod renderer;
+pub mod resource_pack;
 mod ui;
 mod window;
 mod world;

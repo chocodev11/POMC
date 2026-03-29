@@ -307,7 +307,7 @@ fn load_destroy_atlas(
 
     for stage in 0..STAGE_COUNT {
         let key = format!("minecraft/textures/block/destroy_stage_{stage}.png");
-        let path = resolve_asset_path(assets_dir, asset_index, &key);
+        let path = resolve_asset_path(assets_dir, asset_index, &key, None);
         if let Some((pixels, w, _h)) = util::load_png(&path) {
             tile_size = w;
             atlas_pixels.extend_from_slice(&pixels);

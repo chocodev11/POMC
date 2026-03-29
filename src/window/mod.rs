@@ -128,6 +128,7 @@ struct App {
     server_render_distance: u32,
     server_simulation_distance: u32,
     pending_skin_uuid: Option<uuid::Uuid>,
+    resource_packs: crate::resource_pack::ResourcePackManager,
 }
 
 struct FpsCounter {
@@ -177,6 +178,7 @@ impl App {
             GameState::Menu
         };
 
+        let resource_packs = crate::resource_pack::ResourcePackManager::new(&game_dir);
         Self {
             display_mode: DisplayMode::Windowed,
             window: None,
@@ -222,6 +224,7 @@ impl App {
             last_sent_horizontal_collision: false,
             was_sprinting: false,
             position_send_counter: 0,
+            resource_packs,
         }
     }
 
@@ -335,7 +338,7 @@ impl App {
         if let Some(renderer) = &mut self.renderer {
             renderer.clear_chunk_meshes();
             self.mesh_dispatcher =
-                Some(renderer.create_mesh_dispatcher(self.biome_climate.clone()));
+                Some(renderer.create_mesh_dispatcher(self.biome_climate.clone(), None));
         }
         if let Some(reason) = reason {
             self.menu.show_disconnect(reason);
@@ -379,7 +382,7 @@ impl App {
                     if let Some(renderer) = &mut self.renderer {
                         renderer.clear_chunk_meshes();
                         self.mesh_dispatcher =
-                            Some(renderer.create_mesh_dispatcher(self.biome_climate.clone()));
+                            Some(renderer.create_mesh_dispatcher(self.biome_climate.clone(), None));
                     }
                 }
                 NetworkEvent::ChunkLoaded {
@@ -560,6 +563,46 @@ impl App {
                 NetworkEvent::EntityItemData { .. } => {}
                 NetworkEvent::EntityBabyFlag { id, is_baby } => {
                     self.entity_store.set_baby(id, is_baby);
+                }
+                NetworkEvent::ResourcePackPush {
+                    id,
+                    url,
+                    hash,
+                    required,
+                } => {
+                    use azalea_protocol::packets::game::s_resource_pack;
+                    log::info!("Resource pack push: {id} url={url} required={required}");
+                    let rt = self.tokio_rt.clone();
+                    let result =
+                        rt.block_on(self.resource_packs.download_and_apply(id, &url, &hash));
+                    let action = match &result {
+                        Ok(()) => {
+                            log::info!("Resource pack {id} loaded successfully");
+                            s_resource_pack::Action::SuccessfullyLoaded
+                        }
+                        Err(e) => {
+                            log::error!("Resource pack {id} failed: {e}");
+                            if required {
+                                disconnect_reason =
+                                    Some(format!("Required resource pack failed: {e}"));
+                            }
+                            s_resource_pack::Action::FailedDownload
+                        }
+                    };
+                    if let Some(sender) = &self.packet_sender {
+                        sender.send(ServerboundGamePacket::ResourcePack(
+                            s_resource_pack::ServerboundResourcePack { id, action },
+                        ));
+                    }
+                    self.menu.active_packs = self.resource_packs.active_pack_info();
+                }
+                NetworkEvent::ResourcePackPop { id } => {
+                    if let Some(id) = id {
+                        self.resource_packs.remove_server_pack(&id);
+                    } else {
+                        self.resource_packs.clear_server_packs();
+                    }
+                    self.menu.active_packs = self.resource_packs.active_pack_info();
                 }
                 NetworkEvent::Disconnected { reason } => {
                     log::warn!("Disconnected: {reason}");
@@ -787,7 +830,8 @@ impl ApplicationHandler for App {
             }
         };
 
-        self.mesh_dispatcher = Some(renderer.create_mesh_dispatcher(self.biome_climate.clone()));
+        self.mesh_dispatcher =
+            Some(renderer.create_mesh_dispatcher(self.biome_climate.clone(), None));
         if let Some(uuid) = self.pending_skin_uuid.take() {
             renderer.load_player_skin(&uuid, &self.tokio_rt);
         }
@@ -980,6 +1024,42 @@ impl ApplicationHandler for App {
                                 if self.menu.display_mode != self.display_mode {
                                     self.display_mode = self.menu.display_mode;
                                     self.apply_display_mode();
+                                }
+
+                                if self.menu.rescan_packs {
+                                    self.menu.rescan_packs = false;
+                                    self.resource_packs.scan_local_packs();
+                                    self.menu.available_packs =
+                                        self.resource_packs.available_local_packs().to_vec();
+                                    self.menu.active_packs = self.resource_packs.active_pack_info();
+                                }
+
+                                if let Some((name, enable)) = self.menu.pack_toggle.take() {
+                                    if enable {
+                                        self.resource_packs.enable_local_pack(&name);
+                                    } else {
+                                        self.resource_packs.disable_local_pack(&name);
+                                    }
+                                    self.menu.active_packs = self.resource_packs.active_pack_info();
+                                    self.menu.available_packs =
+                                        self.resource_packs.available_local_packs().to_vec();
+                                }
+
+                                if self.menu.reload_assets {
+                                    self.menu.reload_assets = false;
+                                    if let Some(renderer) = &mut self.renderer {
+                                        renderer
+                                            .reload_assets(&self.game_dir, &self.resource_packs);
+                                        if let Some(ref mut dispatcher) = self.mesh_dispatcher {
+                                            *dispatcher = renderer.create_mesh_dispatcher(
+                                                self.biome_climate.clone(),
+                                                Some(&self.resource_packs),
+                                            );
+                                            for pos in self.chunk_store.loaded_positions() {
+                                                dispatcher.enqueue(&self.chunk_store, pos, 0);
+                                            }
+                                        }
+                                    }
                                 }
 
                                 if result.clicked_button

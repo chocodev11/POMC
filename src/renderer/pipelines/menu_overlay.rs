@@ -1288,7 +1288,7 @@ fn build_sprite_atlas(
 
     let mut images: Vec<(SpriteId, Vec<u8>, u32, u32, f32)> = Vec::new();
     for &(id, asset_key, border) in sprites {
-        let path = resolve_asset_path(assets_dir, asset_index, asset_key);
+        let path = resolve_asset_path(assets_dir, asset_index, asset_key, None);
         match crate::assets::load_image(&path) {
             Ok(img) => {
                 let rgba = img.to_rgba8();
@@ -1307,6 +1307,7 @@ fn build_sprite_atlas(
         assets_dir,
         asset_index,
         "minecraft/textures/gui/container/inventory.png",
+        None,
     );
     match crate::assets::load_image(&inv_path) {
         Ok(img) => {
@@ -1430,13 +1431,19 @@ fn build_item_atlas(
     let mut regions = HashMap::new();
     let mut slot = 0u32;
 
-    let item_dir = resolve_asset_path(assets_dir, asset_index, "minecraft/textures/item/dummy.png");
+    let item_dir = resolve_asset_path(
+        assets_dir,
+        asset_index,
+        "minecraft/textures/item/dummy.png",
+        None,
+    );
     let item_parent = item_dir.parent().unwrap_or(Path::new("."));
 
     let block_dir = resolve_asset_path(
         assets_dir,
         asset_index,
         "minecraft/textures/block/dummy.png",
+        None,
     );
     let block_parent = block_dir.parent().unwrap_or(Path::new("."));
 

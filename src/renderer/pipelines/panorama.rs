@@ -308,7 +308,7 @@ fn resolve_panorama_face(
         return Some(flat);
     }
     let asset_key = format!("minecraft/textures/gui/title/background/panorama_{i}.png");
-    let path = resolve_asset_path(assets_dir, asset_index, &asset_key);
+    let path = resolve_asset_path(assets_dir, asset_index, &asset_key, None);
     path.exists().then_some(path)
 }
 

@@ -427,7 +427,7 @@ fn load_skin_texture(
     asset_index: &Option<AssetIndex>,
 ) -> (vk::Image, vk::ImageView, Allocation, u32, u32) {
     let skin_key = "minecraft/textures/entity/player/wide/steve.png";
-    let skin_path = resolve_asset_path(assets_dir, asset_index, skin_key);
+    let skin_path = resolve_asset_path(assets_dir, asset_index, skin_key, None);
 
     let (pixels, width, height) = util::load_png(&skin_path).unwrap_or_else(|| {
         log::warn!(

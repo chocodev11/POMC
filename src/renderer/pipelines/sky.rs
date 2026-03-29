@@ -789,7 +789,7 @@ fn load_celestial_texture(
     asset_index: &Option<AssetIndex>,
     key: &str,
 ) -> (vk::Image, vk::ImageView, Allocation) {
-    let path = resolve_asset_path(assets_dir, asset_index, key);
+    let path = resolve_asset_path(assets_dir, asset_index, key, None);
     let (pixels, w, h) = util::load_png(&path).unwrap_or_else(|| {
         log::warn!("Failed to load {key}, using fallback");
         (vec![255u8; 16 * 16 * 4], 16, 16)

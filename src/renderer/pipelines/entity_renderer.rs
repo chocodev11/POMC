@@ -487,7 +487,7 @@ fn load_entity_texture(
     let (pixels, width, height) = asset_keys
         .iter()
         .find_map(|key| {
-            let path = resolve_asset_path(assets_dir, asset_index, key);
+            let path = resolve_asset_path(assets_dir, asset_index, key, None);
             util::load_png(&path)
         })
         .unwrap_or_else(|| {

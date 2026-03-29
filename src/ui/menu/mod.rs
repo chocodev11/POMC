@@ -267,6 +267,13 @@ pub struct MainMenu {
     active_slider: Option<&'static str>,
     settings_dir: PathBuf,
     menu_open_time: Option<Instant>,
+    pub active_packs: Vec<crate::resource_pack::PackInfo>,
+    pub available_packs: Vec<crate::resource_pack::PackInfo>,
+    pub packs_dir: PathBuf,
+    pub pack_toggle: Option<(String, bool)>,
+    pub rescan_packs: bool,
+    pub reload_assets: bool,
+    pack_search: String,
 }
 
 impl MainMenu {
@@ -321,6 +328,13 @@ impl MainMenu {
             active_slider: None,
             settings_dir: game_dir.to_path_buf(),
             menu_open_time: None,
+            active_packs: Vec::new(),
+            available_packs: Vec::new(),
+            packs_dir: game_dir.join("resourcepacks"),
+            pack_toggle: None,
+            rescan_packs: false,
+            reload_assets: false,
+            pack_search: String::new(),
         }
     }
 
@@ -426,13 +440,9 @@ impl MainMenu {
                 self.build_options_stub(screen_w, screen_h, input, "Language", Screen::Options)
             }
             Screen::OptionsChatSettings => self.build_options_chat(screen_w, screen_h, input),
-            Screen::OptionsResourcePacks => self.build_options_stub(
-                screen_w,
-                screen_h,
-                input,
-                "Resource Packs",
-                Screen::Options,
-            ),
+            Screen::OptionsResourcePacks => {
+                self.build_options_resource_packs(screen_w, screen_h, input, &text_width_fn)
+            }
             Screen::OptionsAccessibility => {
                 self.build_options_accessibility(screen_w, screen_h, input)
             }
