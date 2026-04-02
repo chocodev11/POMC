@@ -267,6 +267,8 @@ pub struct MainMenu {
     active_slider: Option<&'static str>,
     settings_dir: PathBuf,
     menu_open_time: Option<Instant>,
+    last_favicon_count: usize,
+    favicon_dirty_since: Option<Instant>,
 }
 
 impl MainMenu {
@@ -321,6 +323,8 @@ impl MainMenu {
             active_slider: None,
             settings_dir: game_dir.to_path_buf(),
             menu_open_time: None,
+            last_favicon_count: 0,
+            favicon_dirty_since: None,
         }
     }
 
@@ -377,6 +381,59 @@ impl MainMenu {
 
     pub fn is_main_screen(&self) -> bool {
         matches!(self.screen, Screen::Main)
+    }
+
+    pub fn is_server_list_screen(&self) -> bool {
+        matches!(self.screen, Screen::ServerList)
+    }
+
+    pub fn favicons_changed(&mut self) -> bool {
+        let results = self.ping_results.read();
+        let count = results
+            .values()
+            .filter(|s| {
+                matches!(
+                    s,
+                    PingState::Success {
+                        favicon_rgba: Some(_),
+                        ..
+                    }
+                )
+            })
+            .count();
+        if count != self.last_favicon_count {
+            self.last_favicon_count = count;
+            self.favicon_dirty_since = Some(Instant::now());
+            false
+        } else if let Some(since) = self.favicon_dirty_since {
+            if since.elapsed().as_millis() >= 500 {
+                self.favicon_dirty_since = None;
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        }
+    }
+
+    pub fn collect_favicons(&self) -> Vec<(String, Vec<u8>, u32)> {
+        let results = self.ping_results.read();
+        results
+            .iter()
+            .filter_map(|(addr, state)| {
+                if let PingState::Success {
+                    favicon_rgba: Some(rgba),
+                    ..
+                } = state
+                {
+                    let size = (rgba.len() as f32 / 4.0).sqrt() as u32;
+                    Some((addr.clone(), rgba.clone(), size))
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 
     pub fn show_disconnect(&mut self, reason: String) {
